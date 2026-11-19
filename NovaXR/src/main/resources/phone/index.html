@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>NovaXR Phone</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090c14;color:#f4f6ff;font:15px system-ui;text-align:center}
+header{padding:16px;background:#151b2b;font-weight:800;font-size:22px}main{padding:14px}
+button{background:#7c5cff;color:white;border:0;border-radius:12px;padding:13px 16px;font-weight:700;margin:5px}
+#status{color:#7ee5c0;margin:12px}.screen{width:100%;max-height:70vh;object-fit:contain;background:#000;border-radius:12px}
+.sbs{display:flex;gap:2px}.sbs img{width:50%;height:65vh;object-fit:cover}
+small{color:#a9b3ca;display:block;margin:10px}
+</style></head><body>
+<header>NovaXR <small>ANDROID COMPANION</small></header>
+<main>
+<div id="status">Connecting to PC stream…</div>
+<img id="screen" class="screen" src="/stream" alt="PC desktop stream">
+<div><button id="track">Enable head tracking</button><button id="view">Toggle split view</button></div>
+<small>Keep your phone and PC on the same private Wi-Fi network. Use a suitable phone VR viewer.</small>
+<div id="orientation">Head pose: waiting</div>
+</main>
+<script>
+const statusEl=document.querySelector('#status'), pose=document.querySelector('#orientation');
+const wsUrl=`ws://${location.hostname}:8766`; let ws;
+function connect(){ws=new WebSocket(wsUrl);ws.onopen=()=>statusEl.textContent='Connected to NovaXR PC';ws.onclose=()=>{statusEl.textContent='Telemetry disconnected — retrying';setTimeout(connect,2000)};ws.onerror=()=>{}}
+connect();
+let enabled=false;
+document.querySelector('#track').onclick=async()=>{
+  if(!('DeviceOrientationEvent'in window)){statusEl.textContent='This browser does not expose device orientation';return}
+  try{if(typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')throw new Error('Permission denied')}}
+  catch(e){statusEl.textContent='Motion permission: '+e.message;return}
+  enabled=true;statusEl.textContent='Head tracking telemetry enabled';
+};
+window.addEventListener('deviceorientation',e=>{
+ if(!enabled)return;const d={type:'orientation',alpha:e.alpha,beta:e.beta,gamma:e.gamma,ts:Date.now()};
+ pose.textContent=`Yaw ${Number(e.alpha||0).toFixed(1)}° · Pitch ${Number(e.beta||0).toFixed(1)}° · Roll ${Number(e.gamma||0).toFixed(1)}°`;
+ if(ws&&ws.readyState===1)ws.send(JSON.stringify(d));
+});
+document.querySelector('#view').onclick=()=>{
+ const img=document.querySelector('#screen');
+ if(img.parentElement.classList.contains('sbs')){img.parentElement.classList.remove('sbs');img.className='screen';}
+ else {img.parentElement.classList.add('sbs');img.className='';}
+};
+document.addEventListener('touchstart',()=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'touch',action:'start',ts:Date.now()}))},{passive:true});
+</script></body></html>
